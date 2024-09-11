@@ -1,4 +1,8 @@
+![alt tag](https://github.com/jchristn/PDictionary/raw/main/Assets/icon.ico)
+
 # PDictionary
+
+[![NuGet Version](https://img.shields.io/nuget/v/PDictionary.svg?style=flat)](https://www.nuget.org/packages/PDictionary/) | [![NuGet](https://img.shields.io/nuget/dt/PDictionary.svg)](https://www.nuget.org/packages/PDictionary)
 
 PDictionary is a persistent dictionary that stores dictionary contents to a JSON file on the filesystem.
 
