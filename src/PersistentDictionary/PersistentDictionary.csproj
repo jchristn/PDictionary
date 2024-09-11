@@ -8,7 +8,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<PackageId>PDictionary</PackageId>
 		<Title>PDictionary is a persistent dictionary that stores dictionary contents to a JSON file.</Title>
-		<Version>1.0.0</Version>
+		<Version>1.0.1</Version>
 		<Company>Joel Christner</Company>
 		<Product>PDictionary</Product>
 		<Authors>Joel Christner</Authors>

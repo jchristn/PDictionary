@@ -137,7 +137,13 @@
             _Filename = filename;
 
             if (File.Exists(filename))
+            {
                 _Dictionary = _Serializer.DeserializeJson<Dictionary<TKey, TValue>>(File.ReadAllText(filename));
+            }
+            else
+            {
+                File.WriteAllText(filename, "{}");
+            }
         }
 
         #endregion
