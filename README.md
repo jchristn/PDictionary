@@ -26,6 +26,16 @@ PDictionary<string, string> pdict = new PDictionary<string, string>("pdict.json"
 pdict.Add("hello", "world"); // automatically re-writes the backing file
 ```
 
+## Testing
+
+The library is covered by an exhaustive, runner-agnostic test suite built on [Touchstone](https://www.nuget.org/packages/Touchstone.Core). All test cases (both positive and negative) are defined once in **`Test.Shared`** (the single source of truth) and executed unchanged by three hosts:
+
+- **`Test.Automated`** &mdash; Touchstone CLI runner. Run with `dotnet run --project src/Test.Automated`. Prints a colored pass/fail table and returns a non-zero exit code on failure (CI-friendly). Pass a path argument to also export JSON results.
+- **`Test.Xunit`** &mdash; Touchstone xUnit adapter. Run with `dotnet test src/Test.Xunit`.
+- **`Test.Nunit`** &mdash; Touchstone NUnit adapter. Run with `dotnet test src/Test.Nunit`.
+
+The `Test` project remains an interactive console app for exercising the library by hand.
+
 ## Version History
 
 Refer to `CHANGELOG.md` for version history.
