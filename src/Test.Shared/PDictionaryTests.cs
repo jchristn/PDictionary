@@ -43,7 +43,8 @@ namespace Test.Shared
                     ClearSuite(),
                     SerializerSuite(),
                     PersistenceSuite(),
-                    TypeCoverageSuite()
+                    TypeCoverageSuite(),
+                    ConcurrencySuite()
                 };
             }
         }
@@ -111,6 +112,16 @@ namespace Test.Shared
                     {
                         PDictionary<string, string> dict = new PDictionary<string, string>(path);
                         Check.Equal(0, dict.Count);
+                    });
+                }),
+
+                Case(s, "MalformedFileThrows", "Constructor over a file containing malformed JSON throws rather than silently succeeding", () =>
+                {
+                    // The constructor deserializes existing file contents; a corrupt/truncated file must surface
+                    // as an exception rather than an empty or half-populated dictionary.
+                    TempFile.WithExisting("{ this is not valid json", path =>
+                    {
+                        Check.Throws<Exception>(() => new PDictionary<string, string>(path));
                     });
                 })
             });
@@ -245,6 +256,15 @@ namespace Test.Shared
                     {
                         PDictionary<string, string> dict = new PDictionary<string, string>(path);
                         Check.Throws<KeyNotFoundException>(() => { string _ = dict["missing"]; });
+                    });
+                }),
+
+                Case(s, "GetNullKeyThrows", "Indexer get with a null key throws ArgumentNullException", () =>
+                {
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, string> dict = new PDictionary<string, string>(path);
+                        Check.Throws<ArgumentNullException>(() => { string _ = dict[null]; });
                     });
                 }),
 
@@ -404,6 +424,34 @@ namespace Test.Shared
                     });
                 }),
 
+                Case(s, "ContainsPairAbsentKey", "Contains(KeyValuePair) returns false when the key is absent", () =>
+                {
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, string> dict = new PDictionary<string, string>(path);
+                        dict.Add("k", "v");
+                        Check.False(dict.Contains(new KeyValuePair<string, string>("absent", "v")));
+                    });
+                }),
+
+                Case(s, "ContainsKeyNullThrows", "ContainsKey with a null key throws ArgumentNullException", () =>
+                {
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, string> dict = new PDictionary<string, string>(path);
+                        Check.Throws<ArgumentNullException>(() => dict.ContainsKey(null));
+                    });
+                }),
+
+                Case(s, "TryGetValueNullThrows", "TryGetValue with a null key throws ArgumentNullException", () =>
+                {
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, string> dict = new PDictionary<string, string>(path);
+                        Check.Throws<ArgumentNullException>(() => dict.TryGetValue(null, out string _));
+                    });
+                }),
+
                 Case(s, "TryGetValueHit", "TryGetValue returns true and the value for a present key", () =>
                 {
                     TempFile.With(path =>
@@ -486,6 +534,26 @@ namespace Test.Shared
                         Check.Equal(2, values.Count);
                         Check.Equal("1", values[0]);
                         Check.Equal("2", values[1]);
+                    });
+                }),
+
+                Case(s, "KeysEmptyWhenEmpty", "Keys is empty for an empty dictionary", () =>
+                {
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, string> dict = new PDictionary<string, string>(path);
+                        Check.NotNull(dict.Keys);
+                        Check.Equal(0, dict.Keys.Count);
+                    });
+                }),
+
+                Case(s, "ValuesEmptyWhenEmpty", "Values is empty for an empty dictionary", () =>
+                {
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, string> dict = new PDictionary<string, string>(path);
+                        Check.NotNull(dict.Values);
+                        Check.Equal(0, dict.Values.Count);
                     });
                 }),
 
@@ -774,6 +842,67 @@ namespace Test.Shared
                         Check.Equal(2, reloaded.Count);
                         Check.Equal(new Person { Name = "Joel", Age = 30 }, reloaded["joel"]);
                         Check.Equal(25, reloaded["jane"].Age);
+                    });
+                })
+            });
+        }
+
+        #endregion
+
+        #region Concurrency-Suite
+
+        private static TestSuiteDescriptor ConcurrencySuite()
+        {
+            const string s = "Concurrency";
+            return new TestSuiteDescriptor(s, "Thread-safety of the ReaderWriterLockSlim-guarded operations", new List<TestCaseDescriptor>
+            {
+                Case(s, "ParallelAddsAreThreadSafe", "Concurrent Add from many threads loses no entries and corrupts no state", () =>
+                {
+                    // Each thread writes a disjoint block of keys. Every write persists to disk under a write lock,
+                    // so the final count must equal the total written and every key must be present and reloadable.
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, int> dict = new PDictionary<string, int>(path);
+                        const int threads = 8;
+                        const int perThread = 25;
+
+                        Parallel.For(0, threads, t =>
+                        {
+                            for (int i = 0; i < perThread; i++)
+                            {
+                                int n = (t * perThread) + i;
+                                dict.Add("k" + n, n);
+                            }
+                        });
+
+                        Check.Equal(threads * perThread, dict.Count, "No concurrent adds should have been lost");
+                        for (int n = 0; n < threads * perThread; n++)
+                            Check.Equal(n, dict["k" + n]);
+
+                        PDictionary<string, int> reloaded = new PDictionary<string, int>(path);
+                        Check.Equal(threads * perThread, reloaded.Count, "Persisted state should be intact after concurrent writes");
+                    });
+                }),
+
+                Case(s, "ParallelReadWriteNoCorruption", "Concurrent reads and writes interleave without throwing or corrupting the file", () =>
+                {
+                    // Exercises the read-lock and write-lock paths simultaneously: readers enumerate/count while
+                    // writers mutate. The snapshotting enumerator and reader/writer lock must keep this exception-free.
+                    TempFile.With(path =>
+                    {
+                        PDictionary<string, int> dict = new PDictionary<string, int>(path);
+                        for (int i = 0; i < 50; i++) dict.Add("seed" + i, i);
+
+                        Parallel.Invoke(
+                            () => { for (int i = 0; i < 100; i++) dict.Add("w" + i, i); },
+                            () => { for (int i = 0; i < 100; i++) { int _ = dict.Count; } },
+                            () => { for (int i = 0; i < 100; i++) { foreach (KeyValuePair<string, int> kvp in dict) { } } },
+                            () => { for (int i = 0; i < 100; i++) { bool _ = dict.ContainsKey("seed0"); } });
+
+                        Check.Equal(150, dict.Count, "Seeded plus written entries should all be present");
+
+                        PDictionary<string, int> reloaded = new PDictionary<string, int>(path);
+                        Check.Equal(150, reloaded.Count, "Backing file should remain valid, well-formed JSON");
                     });
                 })
             });

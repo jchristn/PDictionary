@@ -46,7 +46,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="SerializationHelper" Version="2.0.0" />
+		<PackageReference Include="SerializationHelper" Version="2.0.3" />
 	</ItemGroup>
 
 </Project>
